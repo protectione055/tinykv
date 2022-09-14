@@ -70,6 +70,7 @@ func InitRaftLocalState(raftEngine *badger.DB, region *metapb.Region) (*rspb.Raf
 	return raftState, nil
 }
 
+// 
 func InitApplyState(kvEngine *badger.DB, region *metapb.Region) (*rspb.RaftApplyState, error) {
 	applyState, err := GetApplyState(kvEngine, region.Id)
 	if err != nil && err != badger.ErrKeyNotFound {

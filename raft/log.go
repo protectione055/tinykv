@@ -14,13 +14,17 @@
 
 package raft
 
-import pb "github.com/pingcap-incubator/tinykv/proto/pkg/eraftpb"
+import (
+	"github.com/pingcap-incubator/tinykv/log"
+	pb "github.com/pingcap-incubator/tinykv/proto/pkg/eraftpb"
+	"github.com/pkg/errors"
+)
 
 // RaftLog manage the log entries, its struct look like:
 //
-//  snapshot/first.....applied....committed....stabled.....last
-//  --------|------------------------------------------------|
-//                            log entries
+//	snapshot/first.....applied....committed....stabled.....last
+//	--------|------------------------------------------------|
+//	                          log entries
 //
 // for simplify the RaftLog implement should manage all log entries
 // that not truncated
@@ -56,7 +60,22 @@ type RaftLog struct {
 // to the state that it just commits and applies the latest snapshot.
 func newLog(storage Storage) *RaftLog {
 	// Your Code Here (2A).
-	return nil
+	lastIndex, _ := storage.LastIndex()
+	firstIndex, err := storage.FirstIndex()
+	if err != nil {
+		log.Debug("newLog: the first log entry is not available")
+	}
+
+	// 有点怪，storage接口没有记录applied的值，测试传入的是MemoryStorage.
+	hardState, _, _ := storage.InitialState()
+	raftLog := new(RaftLog)
+	raftLog.storage = storage
+	raftLog.committed = hardState.Commit
+	raftLog.applied, _ = storage.FirstIndex()
+	raftLog.stabled = lastIndex
+	raftLog.entries, _ = storage.Entries(firstIndex, lastIndex)
+
+	return raftLog
 }
 
 // We need to compact the log entries in some point of time like
@@ -69,23 +88,39 @@ func (l *RaftLog) maybeCompact() {
 // unstableEntries return all the unstable entries
 func (l *RaftLog) unstableEntries() []pb.Entry {
 	// Your Code Here (2A).
-	return nil
+	firstIndex, _ := l.storage.FirstIndex()
+	firstUnstableIndex := l.stabled - firstIndex + 1
+	res := l.entries[firstUnstableIndex:]
+	return res
 }
 
 // nextEnts returns all the committed but not applied entries
 func (l *RaftLog) nextEnts() (ents []pb.Entry) {
 	// Your Code Here (2A).
-	return nil
+	firstIndex, _ := l.storage.FirstIndex()
+	appliedIndex := l.applied - firstIndex
+	ents = l.entries[appliedIndex+1:]
+	return ents
 }
 
 // LastIndex return the last index of the log entries
 func (l *RaftLog) LastIndex() uint64 {
 	// Your Code Here (2A).
-	return 0
+	firstIndex, _ := l.storage.FirstIndex()
+	lastIndex := firstIndex + uint64(len(l.entries))
+	return lastIndex
 }
 
 // Term return the term of the entry in the given index
 func (l *RaftLog) Term(i uint64) (uint64, error) {
 	// Your Code Here (2A).
-	return 0, nil
+	firstIndex, _ := l.storage.FirstIndex()
+	// i must be greater or equal than the first index
+	if i < firstIndex {
+		log.Debug("specified index is less than the first index of entries")
+		return 0, errors.Errorf("specified index: %v, first index: %v", i, firstIndex)
+	}
+
+	term, err := l.storage.Term(i)
+	return term, err
 }
