@@ -61,19 +61,27 @@ type RaftLog struct {
 func newLog(storage Storage) *RaftLog {
 	// Your Code Here (2A).
 	lastIndex, _ := storage.LastIndex()
-	firstIndex, err := storage.FirstIndex()
-	if err != nil {
-		log.Debug("newLog: the first log entry is not available")
+	firstIndex, _ := storage.FirstIndex()
+	// offset := firstIndex - 1
+	// if err != nil {
+	// 	log.Debug("newLog: the first log entry is not available")
+	// }
+
+	// log.Panicf("offset: %v, lastIndex: %v", firstIndex, lastIndex)
+	ents := make([]pb.Entry, 1)
+	if firstIndex < lastIndex {
+		ents, _ = storage.Entries(firstIndex, lastIndex)
 	}
 
-	// 有点怪，storage接口没有记录applied的值，测试传入的是MemoryStorage.
+	// 有点怪，storage接口没有记录applied的值，测试传入的是MemoryStorage.似乎是由应用维护applied的值。
 	hardState, _, _ := storage.InitialState()
-	raftLog := new(RaftLog)
-	raftLog.storage = storage
-	raftLog.committed = hardState.Commit
-	raftLog.applied, _ = storage.FirstIndex()
-	raftLog.stabled = lastIndex
-	raftLog.entries, _ = storage.Entries(firstIndex, lastIndex)
+	raftLog := &RaftLog{
+		storage:   storage,
+		committed: hardState.Commit,
+		applied:   firstIndex,
+		stabled:   lastIndex,
+		entries:   ents,
+	}
 
 	return raftLog
 }
@@ -97,8 +105,8 @@ func (l *RaftLog) unstableEntries() []pb.Entry {
 // nextEnts returns all the committed but not applied entries
 func (l *RaftLog) nextEnts() (ents []pb.Entry) {
 	// Your Code Here (2A).
-	firstIndex, _ := l.storage.FirstIndex()
-	appliedIndex := l.applied - firstIndex
+	offset, _ := l.storage.FirstIndex()
+	appliedIndex := l.applied - offset
 	ents = l.entries[appliedIndex+1:]
 	return ents
 }
@@ -106,21 +114,27 @@ func (l *RaftLog) nextEnts() (ents []pb.Entry) {
 // LastIndex return the last index of the log entries
 func (l *RaftLog) LastIndex() uint64 {
 	// Your Code Here (2A).
-	firstIndex, _ := l.storage.FirstIndex()
-	lastIndex := firstIndex + uint64(len(l.entries))
+	offset, _ := l.storage.FirstIndex()
+	lastIndex := offset + uint64(len(l.entries))
 	return lastIndex
 }
 
 // Term return the term of the entry in the given index
 func (l *RaftLog) Term(i uint64) (uint64, error) {
 	// Your Code Here (2A).
-	firstIndex, _ := l.storage.FirstIndex()
-	// i must be greater or equal than the first index
-	if i < firstIndex {
-		log.Debug("specified index is less than the first index of entries")
-		return 0, errors.Errorf("specified index: %v, first index: %v", i, firstIndex)
+	if i > l.LastIndex() {
+		log.Panicf("Required term %d is out of bound lastindex(%d)", i, l.LastIndex())
 	}
-
+	offset, _ := l.storage.FirstIndex()
+	if i < offset {
+		log.Debug("specified index is less than the first index of entries")
+		return 0, errors.Errorf("specified index: %v, offset: %v", i, offset)
+	}
 	term, err := l.storage.Term(i)
 	return term, err
+}
+
+// 向日志插入数据
+func (l *RaftLog) Append(ent pb.Entry) {
+	offset := l.storage
 }

@@ -27,6 +27,7 @@ package raft
 
 import (
 	"fmt"
+	"log"
 	"reflect"
 	"sort"
 	"testing"
@@ -138,6 +139,7 @@ func testNonleaderStartElection(t *testing.T, state StateType) {
 	}
 
 	for i := 1; i < 2*et; i++ {
+		log.Print(i)
 		r.tick()
 	}
 
