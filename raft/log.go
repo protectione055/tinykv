@@ -17,7 +17,6 @@ package raft
 import (
 	"github.com/pingcap-incubator/tinykv/log"
 	pb "github.com/pingcap-incubator/tinykv/proto/pkg/eraftpb"
-	"github.com/pkg/errors"
 )
 
 // RaftLog manage the log entries, its struct look like:
@@ -114,8 +113,9 @@ func (l *RaftLog) nextEnts() (ents []pb.Entry) {
 // LastIndex return the last index of the log entries
 func (l *RaftLog) LastIndex() uint64 {
 	// Your Code Here (2A).
-	offset, _ := l.storage.FirstIndex()
-	lastIndex := offset + uint64(len(l.entries))
+	// offset, _ := l.storage.FirstIndex()
+	offset := l.entries[0].Index
+	lastIndex := offset + uint64(len(l.entries)) - 1
 	return lastIndex
 }
 
@@ -125,16 +125,15 @@ func (l *RaftLog) Term(i uint64) (uint64, error) {
 	if i > l.LastIndex() {
 		log.Panicf("Required term %d is out of bound lastindex(%d)", i, l.LastIndex())
 	}
-	offset, _ := l.storage.FirstIndex()
-	if i < offset {
-		log.Debug("specified index is less than the first index of entries")
-		return 0, errors.Errorf("specified index: %v, offset: %v", i, offset)
+	splitPoint, _ := l.storage.LastIndex()
+	if i < splitPoint {
+		term, err := l.storage.Term(i)
+		return term, err
 	}
-	term, err := l.storage.Term(i)
-	return term, err
-}
 
-// 向日志插入数据
-func (l *RaftLog) Append(ent pb.Entry) {
-	offset := l.storage
+	offset := l.entries[0].Index
+	if i > l.entries[len(l.entries)-1].Index {
+		log.Panicf("Required term %d is out of bound lastindex(%d)", i, l.LastIndex())
+	}
+	return l.entries[i-offset].Term, nil
 }

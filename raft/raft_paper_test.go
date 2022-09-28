@@ -27,7 +27,7 @@ package raft
 
 import (
 	"fmt"
-	"log"
+	// "log"
 	"reflect"
 	"sort"
 	"testing"
@@ -139,7 +139,6 @@ func testNonleaderStartElection(t *testing.T, state StateType) {
 	}
 
 	for i := 1; i < 2*et; i++ {
-		log.Print(i)
 		r.tick()
 	}
 
@@ -196,7 +195,6 @@ func TestLeaderElectionInOneRoundRPC2AA(t *testing.T) {
 		for id, vote := range tt.votes {
 			r.Step(pb.Message{From: id, To: 1, Term: r.Term, MsgType: pb.MessageType_MsgRequestVoteResponse, Reject: !vote})
 		}
-
 		if r.State != tt.state {
 			t.Errorf("#%d: state = %s, want %s", i, r.State, tt.state)
 		}

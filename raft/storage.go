@@ -146,7 +146,7 @@ func (ms *MemoryStorage) LastIndex() (uint64, error) {
 	defer ms.Unlock()
 	return ms.lastIndex(), nil
 }
-
+// 日志中最新一条日志的序号
 func (ms *MemoryStorage) lastIndex() uint64 {
 	return ms.ents[0].Index + uint64(len(ms.ents)) - 1
 }
@@ -157,7 +157,7 @@ func (ms *MemoryStorage) FirstIndex() (uint64, error) {
 	defer ms.Unlock()
 	return ms.firstIndex(), nil
 }
-
+// 日志中的第一条日志序号，老的日志已经保存到snapshot中
 func (ms *MemoryStorage) firstIndex() uint64 {
 	return ms.ents[0].Index + 1
 }
