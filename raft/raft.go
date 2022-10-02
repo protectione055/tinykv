@@ -182,6 +182,7 @@ func newRaft(c *Config) *Raft {
 	if err := c.validate(); err != nil {
 		panic(err.Error())
 	}
+
 	// Your Code Here (2A).
 	raftLog := newLog(c.Storage)
 	r := &Raft{
@@ -197,10 +198,7 @@ func newRaft(c *Config) *Raft {
 	for _, node := range c.peers {
 		r.Prs[node] = &Progress{0, 1}
 	}
-	// if len(r.Prs) == 1 {
-	// 	r.becomeCandidate()
-	// 	r.becomeLeader()
-	// }
+
 	return r
 }
 
@@ -213,17 +211,19 @@ func (r *Raft) sendAppend(to uint64) bool {
 		return false
 	}
 	//log.Printf("[INFO] node %v append entry %v to %v", r.id, r.RaftLog.LastIndex()-r.RaftLog.entries[0].Index, to)
+
 	offset := r.RaftLog.entries[0].Index
 
 	//构造append信息
-	if _, ok := r.Prs[to]; !ok {
-		//log.Printf("[INFO] sendAppend to %v, but no progress info", to)
-	}
+	// if _, ok := r.Prs[to]; !ok {
+	//log.Printf("[INFO] sendAppend to %v, but no progress info", to)
+	// }
 
 	// r.PrintLog()
 	// r.PrintProgress()
 
-	logTerm, _ := r.RaftLog.Term(r.Prs[to].Match) // 将leader观察到的match发送给follower，被拒绝了再重新匹配
+	// 将leader观察到的match发送给follower，被拒绝了再重新匹配
+	logTerm, _ := r.RaftLog.Term(r.Prs[to].Match)
 	r.Prs[to].Next = r.RaftLog.LastIndex() + 1
 	ents := r.RaftLog.entries[r.Prs[to].Match-offset+1 : r.Prs[to].Next-offset] //将follower落后的log一次性补全
 	appendRequest := pb.Message{
@@ -299,15 +299,14 @@ func (r *Raft) becomeCandidate() {
 	r.resetQuorum()
 	r.State = StateCandidate
 
-	// 发起下一轮选举
 	r.Term++
-	// 给自己投票
 	myLogTerm, _ := r.RaftLog.Term(r.RaftLog.LastIndex())
 	r.Vote = r.id
-	// 设置 [10, 20) 随机超时
 	r.electionTimeout = r.randTimeout(10, 20)
+
 	// //log.Printf("[INFO]set electionTimeout %v", r.electionTimeout)
 	//log.Printf("[INFO] Node %v become candidate with term %v", r.id, r.Term)
+
 	r.Step(pb.Message{MsgType: pb.MessageType_MsgRequestVoteResponse, From: r.id, To: r.id, Term: r.Term, Index: r.RaftLog.LastIndex(), LogTerm: myLogTerm, Reject: false})
 }
 
@@ -315,6 +314,7 @@ func (r *Raft) becomeCandidate() {
 func (r *Raft) becomeLeader() {
 	// Your Code Here (2A).
 	// NOTE: Leader should propose a noop entry on its term
+
 	//log.Printf("[INFO] Node %v became Leader with term %v", r.id, r.Term)
 	r.State = StateLeader
 	r.Lead = r.id
@@ -326,12 +326,10 @@ func (r *Raft) becomeLeader() {
 	r.commitQuorum[r.RaftLog.LastIndex()] = 1
 
 	for node := range r.Prs {
-		// Follower的状态信息初始化为与Leader一样，后面根据返回的response调整。
 		if node == r.id {
 			continue
 		}
 		r.Prs[node] = &Progress{Match: r.RaftLog.LastIndex(), Next: r.RaftLog.LastIndex() + 1}
-		//向所有follower发送空Entry()，在handleAppendResponse中更新progress
 		r.sendAppend(node)
 	}
 }
@@ -340,13 +338,6 @@ func (r *Raft) becomeLeader() {
 // on `eraftpb.proto` for what msgs should be handled
 func (r *Raft) Step(m pb.Message) error {
 	// Your Code Here (2A).
-	// TODO: 检查信息是否过期，过期reject，没过期交给对应的step处理
-	// if m.Term > 0 && m.Term < r.Term {
-	// 	//返回拒绝信息
-	// 	log.Printf("Rejected staled %v from %v to %v", pb.MessageType_name[int32(m.MsgType)], m.From, m.To)
-	// 	r.msgs = append(r.msgs, pb.Message{})
-	// }
-
 	switch r.State {
 	case StateFollower:
 		return r.stepFollower(m)
@@ -355,7 +346,6 @@ func (r *Raft) Step(m pb.Message) error {
 	case StateLeader:
 		return r.stepLeader(m)
 	default:
-
 	}
 	return nil
 }
@@ -373,11 +363,13 @@ func (r *Raft) stepLeader(m pb.Message) error {
 	case pb.MessageType_MsgRequestVote:
 		r.handleVoteRequest(m)
 	case pb.MessageType_MsgPropose:
-		// 将entry加入到log
 		for _, ent_ptr := range m.Entries {
 			var ent pb.Entry
 			if ent_ptr == nil {
-				ent = pb.Entry{EntryType: pb.EntryType_EntryNormal, Term: m.Term, Data: []byte{}, Index: r.RaftLog.LastIndex() + 1}
+				ent = pb.Entry{
+					EntryType: pb.EntryType_EntryNormal, Term: m.Term,
+					Data:  []byte{},
+					Index: r.RaftLog.LastIndex() + 1}
 			} else {
 				ent = *ent_ptr
 				ent.Term = r.Term
@@ -412,7 +404,6 @@ func (r *Raft) stepCandidate(m pb.Message) error {
 			if node == r.id {
 				continue
 			}
-			// Message: 大家好，我是练习时长logTerm的偶像练习生Candidate，请大家多多为我投票
 			logTerm, _ := r.RaftLog.Term(r.RaftLog.LastIndex())
 			r.msgs = append(r.msgs, pb.Message{
 				MsgType: pb.MessageType_MsgRequestVote,
@@ -444,7 +435,6 @@ func (r *Raft) stepFollower(m pb.Message) error {
 			if node == r.id {
 				continue
 			}
-			// Message: 大家好，我是练习时长logTerm的偶像练习生Candidate，请大家多多为我投票
 			logTerm, _ := r.RaftLog.Term(r.RaftLog.LastIndex())
 			r.msgs = append(r.msgs, pb.Message{
 				MsgType: pb.MessageType_MsgRequestVote,
@@ -479,7 +469,8 @@ func (r *Raft) handleAppendEntries(m pb.Message) {
 			MsgType: pb.MessageType_MsgAppendResponse,
 			From:    r.id,
 			To:      m.From,
-			Index:   r.RaftLog.LastIndex(), //Leader将match更新为Index
+			//Leader将match更新为Index
+			Index:   r.RaftLog.LastIndex(), 
 			Reject:  true,
 		})
 		return
@@ -526,7 +517,6 @@ func (r *Raft) handleAppendEntries(m pb.Message) {
 
 // 处理follower返回的AppendResponse，如果接受更新quorum信息，拒绝则重设match并重新append
 func (r *Raft) handleAppendResponse(m pb.Message) {
-	// offset := r.RaftLog.entries[0].Index
 	//log.Printf("[INFO] %v handling append response from %v", m.To, m.From)
 	if !m.GetReject() {
 		// 更新返回数量统计结果，超过大多数则将committed向前移动
@@ -557,16 +547,18 @@ func (r *Raft) handleAppendResponse(m pb.Message) {
 
 // 处理返回的投票结果
 func (r *Raft) handleVoteResponse(m pb.Message) {
-	// 法定节点数
 	if m.MsgType != pb.MessageType_MsgRequestVoteResponse {
 		log.Printf("wrong message for handleVoteResponse")
 	}
+
 	if _, ok := r.votes[m.From]; ok {
 		return
 	} else {
 		r.votes[m.From] = !m.Reject
 	}
+
 	//log.Printf("[INFO] Candidate %v handling vote response from %v, result is %v", r.id, m.From, !m.Reject)
+
 	quorum := uint64(math.Floor(float64(len(r.Prs))/2)) + 1
 	if m.Reject {
 		r.quorum.Reject++
@@ -602,9 +594,8 @@ func (r *Raft) handleHeartbeat(m pb.Message) {
 		LogTerm: logTerm})
 }
 
-// TODO: 如果response中出现不一致，发起append
+// TODO: 检查一下这里
 func (r *Raft) handleHeartbeatResponse(m pb.Message) {
-	//更新Progress信息
 	r.Prs[m.From].Next = r.RaftLog.LastIndex() + 1
 	r.Prs[m.From].Match = m.Index
 
@@ -649,6 +640,7 @@ func (r *Raft) resetQuorum() {
 	r.commitQuorum = map[uint64]uint64{}
 }
 
+// 生成随机时间戳[l, h)
 func (r *Raft) randTimeout(l int, h int) int {
 	if l >= h {
 		log.Panicf("Invalid timeout interval [%v, %v)", l, h)
@@ -658,16 +650,18 @@ func (r *Raft) randTimeout(l int, h int) int {
 	return num
 }
 
-// 投票
+// 响应投票请求
 func (r *Raft) handleVoteRequest(m pb.Message) {
 	// 检查Candidate的Log是否比自己更新
 	myLogTerm, _ := r.RaftLog.Term(r.RaftLog.LastIndex())
 	upToDate := m.Index >= r.RaftLog.LastIndex() && m.LogTerm >= myLogTerm
+
+	// Term比自己大，而且有最新log，则退选
 	if m.Term > r.Term && upToDate {
-		//Term比自己大，而且有最新log，则退选
 		//log.Printf("[INFO] %v changed vote from %v to %v", r.id, r.Vote, m.From)
 		r.Vote = None
 	}
+	// 请求者term比自己小、自己已经投过票或请求者Log不是最新的，拒绝投票
 	if r.Term > m.Term || r.Vote != None && r.Vote != m.From || !upToDate {
 		r.msgs = append(r.msgs, pb.Message{
 			MsgType: pb.MessageType_MsgRequestVoteResponse,
@@ -681,9 +675,9 @@ func (r *Raft) handleVoteRequest(m pb.Message) {
 	}
 
 	// Leader收到一个比他更新的voting请求，说明网络可能发生分区后恢复，这时应该让出Leader
-	if m.From != r.id && (r.State == StateLeader || r.State == StateCandidate) {
+	// if m.From != r.id && (r.State == StateLeader || r.State == StateCandidate) {
 		//log.Printf("[INFO] %s %v with term %v degrade to follower, new Term: %v, m.LogTerm: %v, myLogTerm: %v", r.State, r.id, r.Term, m.Term, m.LogTerm, myLogTerm)
-	}
+	// }
 
 	if m.From != r.id {
 		r.becomeFollower(m.Term, None)
